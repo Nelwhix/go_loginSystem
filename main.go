@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/schema"
+  "github.com/asaskevich/govalidator"
 )
 
 const (
@@ -15,16 +16,19 @@ const (
 )
 
 const (
-  Username = "Nelwhix"
-  Password = "admin"
+  USERNAME = "Nelwhix"
+  PASSWORD = "admin"
+  USERNAME_ERROR_MESSAGE = "Please enter a valid Username"
+  PASSWORD_ERROR_MESSAGE = "Please enter a valid Password"
+  GENERIC_ERROR_MESSAGE = "Validation Error"
 )
 
 type User struct {
-  Username string
-  Password string
+  Username string `valid:"alpha,required"`
+  Password string `valid:"alpha,required"`
 }
 
-func readForm(r *http.Request) *User {
+func readLoginForm(r *http.Request) *User {
   r.ParseForm()
   user := new(User)
   decoder := schema.NewDecoder()
@@ -36,24 +40,58 @@ func readForm(r *http.Request) *User {
   return user
 }
 
+func validateUser(w http.ResponseWriter, r *http.Request, user *User) (bool, string) {
+  valid, validationError := govalidator.ValidateStruct(user)
+
+  if !valid {
+    usernameError := govalidator.ErrorByField(validationError, "Username")
+    passwordError := govalidator.ErrorByField(validationError, "Password")
+
+    if usernameError != "" {
+      log.Printf("Username validation error : ", usernameError)
+      return valid, USERNAME_ERROR_MESSAGE
+    }
+
+    if passwordError != "" {
+      log.Printf("password validation error : ", passwordError)
+      return valid, PASSWORD_ERROR_MESSAGE
+    }
+  }
+  return valid, GENERIC_ERROR_MESSAGE
+}
+
 func renderTemplate(w http.ResponseWriter, r *http.Request) {
   parsedTemplate, _ := template.ParseFiles("./templates/index.html")
   parsedTemplate.Execute(w, nil)
 }
 
+func renderRegisterForm(w http.ResponseWriter, r *http.Request) {
+  parsedTemplate, _ := template.ParseFiles("./templates/register.html")
+  parsedTemplate.Execute(w, nil)
+}
+
 func logInUser(w http.ResponseWriter, r *http.Request) {
-  user := readForm(r)
-  
-  if (user.Username == Username && user.Password == Password) {
+  user := readLoginForm(r)
+  valid, validationErrorMessage := validateUser(w, r, user)
+
+  if !valid {
+    fmt.Fprint(w, validationErrorMessage)
+    return
+  }
+
+  if (user.Username == USERNAME && user.Password == PASSWORD) {
     fmt.Fprintf(w, "Hello " + user.Username + "!")
   } else {
     fmt.Fprintf(w, "Bad credentials")
   }
 }
+
 func main() {
   router := mux.NewRouter()
   router.HandleFunc("/", renderTemplate).Methods("GET")
   router.HandleFunc("/login", logInUser).Methods("POST")
+  router.HandleFunc("/signup", renderRegisterForm).Methods("GET")
+  // router.HandleFunc("/signup", signUpUser).Methods("POST")
   router.PathPrefix("/").Handler(http.StripPrefix("/static", http.FileServer(http.Dir("static/"))))
 
   log.Printf("Server starting on port %v\n", CONN_PORT)
