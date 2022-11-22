@@ -5,9 +5,10 @@ import (
 	"html/template"
 	"log"
 	"net/http"
+	"github.com/asaskevich/govalidator"
 	"github.com/gorilla/mux"
 	"github.com/gorilla/schema"
-  "github.com/asaskevich/govalidator"
+	"github.com/gorilla/securecookie"
 )
 
 const (
@@ -26,6 +27,51 @@ const (
 type User struct {
   Username string `valid:"alpha,required"`
   Password string `valid:"alpha,required"`
+}
+
+var cookieHandler = securecookie.New(
+  securecookie.GenerateRandomKey(64),
+  securecookie.GenerateRandomKey(32),
+)
+
+func getUserName(r *http.Request) (userName string) {
+  cookie, err := r.Cookie("session")
+
+  if err == nil {
+    cookieValue := make(map[string]string)
+    err := cookieHandler.Decode("session", cookie.Value, &cookieValue)
+
+    if err == nil {
+      userName = cookieValue["username"]
+    }
+  }
+  return userName
+}
+
+func setSession(userName string, w http.ResponseWriter) {
+  value := map[string]string {
+    "username": userName,
+  }
+  encoded, err := cookieHandler.Encode("session", value)
+
+  if err == nil {
+    cookie := &http.Cookie {
+      Name : "session",
+      Value: "encoded",
+      Path: "/",
+    }
+    http.SetCookie(w, cookie)
+  }
+}
+
+func clearSession(w http.ResponseWriter, ) {
+  cookie := &http.Cookie {
+    Name: "session",
+    Value: "",
+    Path: "/",
+    MaxAge: -1,
+  }
+  http.SetCookie(w, cookie)
 }
 
 func readLoginForm(r *http.Request) *User {
